@@ -98,6 +98,29 @@ export default function AdminPage() {
     }
   };
 
+  const [isMigratingR2, setIsMigratingR2] = useState(false);
+  const handleMigrateToR2 = async () => {
+    if (!window.confirm('Voulez-vous transférer toutes les images et données vers Cloudflare R2 et MongoDB ?')) return;
+    setIsMigratingR2(true);
+    showNotification('⏳ Transfert vers Cloudflare R2 en cours...');
+    try {
+      const res = await fetch('/api/migrate');
+      const data = await res.json();
+      if (data.success) {
+        showNotification(
+          `✅ Terminé ! ${data.report?.imagesTransferredToR2 || 0} image(s) transférée(s) sur Cloudflare R2 et ${data.report?.productsMigrated || 0} article(s) synchronisé(s) dans MongoDB.`
+        );
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        showNotification(`Erreur transfert : ${data.error || 'Échec'}`);
+      }
+    } catch (err: any) {
+      showNotification(`Erreur : ${err?.message || 'Erreur réseau'}`);
+    } finally {
+      setIsMigratingR2(false);
+    }
+  };
+
   const handleCopyBordereau = (ord: Order) => {
     const itemsText = ord.items
       .map(
@@ -429,7 +452,7 @@ ${itemsText}
         );
 
         if (uploadResult.success && uploadResult.url) {
-          showNotification('Photo téléversée sur le CDN Supabase (0 octet en base) ! 🚀');
+          showNotification('Photo téléversée sur Cloudflare R2 (0 octet en base) ! 🚀');
           callback(uploadResult.url);
           return;
         } else {
@@ -1229,6 +1252,16 @@ ${itemsText}
             <Link href="/" className={styles.switchSiteBtn} id="admin-switch-to-site-btn">
               <span>🌐 Voir le site</span>
             </Link>
+            <button
+              type="button"
+              onClick={handleMigrateToR2}
+              className={styles.switchSiteBtn}
+              style={{ background: '#0284c7', color: '#fff', borderColor: '#0284c7' }}
+              disabled={isMigratingR2}
+              title="Transférer toutes les images et données vers Cloudflare R2 et MongoDB"
+            >
+              <span>{isMigratingR2 ? '⏳ Transfert R2...' : '☁️ Transférer vers R2'}</span>
+            </button>
             <button
               type="button"
               onClick={handleLogout}
@@ -2190,7 +2223,7 @@ ${itemsText}
                           <div className={styles.dropzoneContent}>
                             <UploadIcon />
                             <p className={styles.dropzoneMainText}>
-                              {isUploadingImage ? '⏳ Téléversement vers le CDN Supabase...' : 'Cliquez pour choisir une photo ou glissez-déposez ici'}
+                              {isUploadingImage ? '⏳ Téléversement vers Cloudflare R2...' : 'Cliquez pour choisir une photo ou glissez-déposez ici'}
                             </p>
                             <span className={styles.dropzoneSubText}>JPG, PNG, WEBP acceptés</span>
                           </div>
@@ -2297,7 +2330,7 @@ ${itemsText}
                       <UploadIcon />
                       <p className={styles.dropzoneMainText}>
                         {isUploadingImage
-                          ? '⏳ Envoi des photos vers le CDN Supabase...'
+                          ? '⏳ Envoi des photos vers Cloudflare R2...'
                           : '📁 Télécharger vos photos depuis votre téléphone / ordinateur'}
                       </p>
                       <span className={styles.dropzoneSubText}>
@@ -3137,7 +3170,7 @@ ${itemsText}
                     <UploadIcon />
                     <span>
                       {isUploadingImage
-                        ? '⏳ Envoi vers le CDN Supabase en cours...'
+                        ? '⏳ Envoi vers Cloudflare R2 en cours...'
                         : '📁 Télécharger des photos depuis l\'appareil (Téléphone / Ordinateur)'}
                     </span>
                   </label>
@@ -3258,7 +3291,7 @@ ${itemsText}
                     <UploadIcon />
                     <span>
                       {isUploadingImage
-                        ? '⏳ Envoi vers le CDN Supabase...'
+                        ? '⏳ Envoi vers Cloudflare R2...'
                         : `📁 ${catForm.image ? 'Changer la photo' : "Télécharger une photo depuis l'appareil"}`}
                     </span>
                   </label>

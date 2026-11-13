@@ -8,6 +8,7 @@ import {
   deleteOrder as deleteOrderLib,
 } from '@/lib/orders';
 import { supabase } from '@/lib/supabase';
+import { fetchOrdersApi } from '@/lib/api';
 
 export function useOrders(options: { autoSync?: boolean } = {}) {
   const { autoSync = false } = options;
@@ -21,6 +22,21 @@ export function useOrders(options: { autoSync?: boolean } = {}) {
   }, []);
 
   const syncSupabaseOrders = useCallback(async () => {
+    // 1. Fetch from MongoDB backend
+    try {
+      const mongoOrders = await fetchOrdersApi();
+      if (mongoOrders && mongoOrders.length > 0) {
+        setOrders(mongoOrders);
+        try {
+          localStorage.setItem('velime-orders-data', JSON.stringify(mongoOrders));
+        } catch {}
+        return;
+      }
+    } catch (err) {
+      console.warn('MongoDB orders fetch note:', err);
+    }
+
+    // 2. Fallback to Supabase
     if (!supabase) return;
     try {
       const { data, error } = await supabase

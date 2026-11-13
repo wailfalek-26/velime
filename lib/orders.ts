@@ -1,6 +1,7 @@
 import { Order, OrderStatus } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { sendOrderNotification } from '@/lib/notifications';
+import { createOrderApi, updateOrderStatusApi, deleteOrderApi } from '@/lib/api';
 
 export const ORDERS_STORAGE_KEY = 'velime-orders-data';
 
@@ -44,7 +45,14 @@ export async function createOrder(orderPayload: Omit<Order, 'id' | 'orderNumber'
   const updated = [newOrder, ...current];
   saveLocalOrders(updated);
 
-  // 2. Try async sync to Supabase (non-blocking)
+  // 2. Async sync to MongoDB backend (non-blocking)
+  try {
+    createOrderApi(newOrder).catch((err) => {
+      console.warn('MongoDB order sync note:', err);
+    });
+  } catch {}
+
+  // 3. Fallback sync to Supabase (if configured)
   if (supabase) {
     try {
       await supabase
@@ -85,6 +93,11 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   const updated = current.map((o) => (o.id === orderId ? { ...o, status } : o));
   saveLocalOrders(updated);
 
+  // Sync to MongoDB backend
+  try {
+    updateOrderStatusApi(orderId, status).catch(() => {});
+  } catch {}
+
   if (supabase) {
     try {
       await supabase
@@ -101,6 +114,11 @@ export async function deleteOrder(orderId: string) {
   const current = getLocalOrders();
   const updated = current.filter((o) => o.id !== orderId);
   saveLocalOrders(updated);
+
+  // Sync to MongoDB backend
+  try {
+    deleteOrderApi(orderId).catch(() => {});
+  } catch {}
 
   if (supabase) {
     try {

@@ -1,5 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 import { Product, Category } from '@/types';
+import {
+  fetchProductsApi,
+  fetchProductByIdApi,
+  saveProductApi,
+  updateProductStockApi,
+  deleteProductApi,
+  fetchCategoriesApi,
+  saveCategoryApi,
+  deleteCategoryApi,
+  fetchSiteSettingsApi,
+  saveSiteSettingsApi,
+  syncAllToMongoApi,
+  uploadImageToR2,
+} from '@/lib/api';
 
 // Inline interface to avoid circular import:
 // lib/supabase → hooks/useSiteData → context/SiteDataContext → lib/supabase
@@ -116,6 +130,15 @@ export function mapProductToDb(p: Product): DbProduct {
 // ============================================================
 
 export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const mongoProducts = await fetchProductsApi();
+    if (mongoProducts !== null) {
+      return mongoProducts;
+    }
+  } catch {}
+
+  // 2. Fallback to Supabase
   if (!supabase) return null;
   try {
     const { data, error } = await supabase
@@ -141,6 +164,14 @@ export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
 }
 
 export async function fetchProductBySlugFromSupabase(slugOrId: string): Promise<Product | null> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const mongoProduct = await fetchProductByIdApi(slugOrId);
+    if (mongoProduct !== null) {
+      return mongoProduct;
+    }
+  } catch {}
+
   if (!supabase) return null;
   try {
     const raw = slugOrId.trim();
@@ -170,6 +201,12 @@ export async function fetchProductBySlugFromSupabase(slugOrId: string): Promise<
 }
 
 export async function saveProductToSupabase(product: Product): Promise<boolean> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const saved = await saveProductApi(product);
+    if (saved) return true;
+  } catch {}
+
   if (!supabase) return false;
   try {
     const dbPayload = mapProductToDb(product);
@@ -205,6 +242,20 @@ export async function updateProductStockInSupabase(
   availableSizes?: string[],
   availableColors?: string[]
 ): Promise<boolean> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const updated = await updateProductStockApi(
+      productId,
+      stockStatus,
+      inStock,
+      badge,
+      stockMatrix,
+      availableSizes,
+      availableColors
+    );
+    if (updated) return true;
+  } catch {}
+
   if (!supabase) return false;
   try {
     const payload: any = {
@@ -241,6 +292,12 @@ export async function updateProductStockInSupabase(
 }
 
 export async function deleteProductFromSupabase(productId: string): Promise<boolean> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const deleted = await deleteProductApi(productId);
+    if (deleted) return true;
+  } catch {}
+
   if (!supabase) return false;
   try {
     const { error } = await supabase
@@ -260,6 +317,14 @@ export async function deleteProductFromSupabase(productId: string): Promise<bool
 }
 
 export async function fetchCategoriesFromSupabase(): Promise<Category[] | null> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const mongoCategories = await fetchCategoriesApi();
+    if (mongoCategories !== null) {
+      return mongoCategories;
+    }
+  } catch {}
+
   if (!supabase) return null;
   try {
     const { data, error } = await supabase
@@ -291,6 +356,12 @@ export async function fetchCategoriesFromSupabase(): Promise<Category[] | null> 
 }
 
 export async function saveCategoryToSupabase(category: Category): Promise<boolean> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const saved = await saveCategoryApi(category);
+    if (saved) return true;
+  } catch {}
+
   if (!supabase) return false;
   try {
     const { error } = await supabase
@@ -318,6 +389,12 @@ export async function saveCategoryToSupabase(category: Category): Promise<boolea
 }
 
 export async function deleteCategoryFromSupabase(categoryId: string): Promise<boolean> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const deleted = await deleteCategoryApi(categoryId);
+    if (deleted) return true;
+  } catch {}
+
   if (!supabase) return false;
   try {
     const { error } = await supabase
@@ -337,6 +414,14 @@ export async function deleteCategoryFromSupabase(categoryId: string): Promise<bo
 }
 
 export async function fetchSiteSettingsFromSupabase(): Promise<Partial<SiteData> | null> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const mongoSettings = await fetchSiteSettingsApi();
+    if (mongoSettings !== null) {
+      return mongoSettings;
+    }
+  } catch {}
+
   if (!supabase) return null;
   try {
     const { data, error } = await supabase
@@ -374,6 +459,12 @@ export async function saveSiteSettingsToSupabase(data: {
   brands?: string[];
   lookbookPhotos?: string[];
 }): Promise<boolean> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const saved = await saveSiteSettingsApi(data);
+    if (saved) return true;
+  } catch {}
+
   if (!supabase) return false;
   try {
     const payload: any = {
@@ -406,8 +497,16 @@ export async function saveSiteSettingsToSupabase(data: {
 }
 
 export async function syncAllToSupabase(siteData: SiteData): Promise<{ success: boolean; message: string }> {
+  // 1. Try Next.js API backed by MongoDB
+  try {
+    const mongoRes = await syncAllToMongoApi(siteData);
+    if (mongoRes.success) {
+      return { success: true, message: 'Données synchronisées avec succès sur MongoDB !' };
+    }
+  } catch {}
+
   if (!supabase) {
-    return { success: false, message: 'Supabase n\'est pas encore configuré dans le fichier .env.local.' };
+    return { success: false, message: 'Base de données (MongoDB / Supabase) non connectée.' };
   }
   try {
     // 1. Categories - Sync active & clean up deleted
@@ -509,8 +608,19 @@ export async function uploadImageToSupabaseStorage(
   folder: 'products' | 'categories' | 'hero' | 'lookbook' = 'products',
   originalFileName?: string
 ): Promise<{ success: boolean; url: string; error?: string }> {
+  // 1. Prioritize Cloudflare R2 via our /api/upload Route Handler
+  try {
+    const r2Result = await uploadImageToR2(fileOrBlob, folder, originalFileName);
+    if (r2Result.success && r2Result.url) {
+      return { success: true, url: r2Result.url };
+    }
+  } catch (r2Err) {
+    console.warn('Cloudflare R2 upload attempt note:', r2Err);
+  }
+
+  // 2. Fallback to Supabase Storage if configured
   if (!supabase) {
-    return { success: false, url: '', error: "Supabase n'est pas configuré" };
+    return { success: false, url: '', error: "Cloudflare R2 ou Supabase n'est pas configuré" };
   }
 
   try {
